@@ -1,0 +1,121 @@
+---
+title: "Practical Machine Learning- Course Project"
+author: "Maxwell"
+date: "08/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Executive summary
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+###  Loading Data
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+```{r, load data, message=FALSE, warning=FALSE}
+library(caret)
+library(rpart)
+library(doParallel)
+training<- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", 
+                      sep = ",", na.strings = c("", "NA", "#DIV/0!"), strip.white = TRUE, stringsAsFactors = FALSE)
+
+testing<- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", 
+                    sep = ",", na.string=c("", "NA", "#DIV/0!"), strip.white = TRUE, stringsAsFactors = FALSE)
+
+```
+
+###  Cleaning Data
+In order to clean the data I proceeded the all NA columns  removing, and the near zero covariantes removing
+
+```{r, cleaning}
+
+
+training$classe<-factor(training$classe)
+
+training <- training[,8:length(colnames(training))]
+testing <- testing[ ,8:length(colnames(testing))]
+
+training<- training[ , colSums(is.na(training)) == 0] 
+testing <- testing[, colSums(is.na(testing)) == 0] 
+
+nzv<- nearZeroVar(training,saveMetrics=TRUE)
+training<- training[,nzv$nzv==FALSE]
+
+
+
+``` 
+
+###  Cross Validation Slicing
+Here i sampled 80% of the training data for a  training set and 20% for a cross validation set
+
+```{r, crosvalidation}
+library(caret)
+library(rpart)
+intraining <- createDataPartition(training$classe, p=0.80, list=F)
+trainingset <- training[intraining, ]
+crossvalidationset <- training[-intraining, ]
+
+
+``` 
+
+###  Model Fitting
+I decided to fit  a random forest model optmized by a k-fold cross validation 
+
+
+```{r, fitting, message=FALSE, warning=FALSE,cache=TRUE}
+
+set.seed(825)
+
+fitControl <- trainControl(## 10-fold CV
+                           method = "cv",
+                           number = 5,
+                            allowParallel = TRUE)
+
+
+gbmFit1 <- train(classe ~ ., data = trainingset, 
+                 method = "rf", 
+                 trControl = fitControl,
+                  metric='Accuracy',
+                 verbose = FALSE)
+
+
+
+gbmFit1
+
+
+
+```
+As can be seen above, The model reached  99.2% of accuracy, using 2 predictors.
+
+###  Testing the model
+Here we test the model , checking its accuracy
+
+```{r}
+predtrainingset <- predict(gbmFit1, trainingset)
+print(confusionMatrix(predtrainingset, trainingset$classe))
+plot(gbmFit1)
+```
+The above results, show 100% of accuracy in the training set( confirming  model's consistency ).Further more, the graph shows how the accuracy decreases  as more predictors are included.
+
+
+### Predicting the results
+
+```{r, predicting, cache=TRUE}
+library(caret)
+ptest <- predict(gbmFit1, testing)
+result<- table(ptest,c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20))
+
+
+knitr::kable(result, caption = "Prediction",espace = TRUE)
+```
